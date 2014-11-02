@@ -10,8 +10,8 @@ import org.zeromq.ZMQ.Socket;
 
 /**
  * 1W次请求 ，每次发送64byte ，响应2560byte ,处理约等于24m数据，平均一次请求耗时5.4s
- * 
  * request count:10000 read bytes :25600000 byte cost :5319 ms avg request cost:53ms
+ * request count:22500 read bytes :57600000 byte cost :13160 ms avg request cost:87ms
  * 
  */
 public class Client {
@@ -40,6 +40,7 @@ public class Client {
 								break;
 							if( pollItem[0].isReadable() ){
 								byte[] rep = req.recv();
+//								System.out.println(rep);
 								len = count.addAndGet(rep.length);
 								count_.getAndIncrement();
 								isEnd = true;
