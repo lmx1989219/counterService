@@ -20,17 +20,19 @@ public class Client {
 		final long begin = System.currentTimeMillis();
 		final AtomicLong count = new AtomicLong(0);
 		final AtomicLong count_ = new AtomicLong(0);
-		final int reqNo = 100;
+		final int reqNo = 5;
+		final int sendNo = 4;
 		
 		for( int i=0;i<reqNo;++i ){
+			final int m = i;
 			new Thread(){
 				public void run(){
 					Socket req = c.socket(ZMQ.REQ);
 					req.connect("tcp://127.0.0.1:6660");
-					byte[] rq = new byte[64];
+//					byte[] rq = new byte[64];
 					long len = 0;
-					for( int i=0;i<reqNo;++i ){
-						req.send(rq,0);
+					for( int j=0;j<sendNo;++j ){
+						req.send((m+"").getBytes(),0);
 						boolean isEnd = false;
 						
 						while( !isEnd ){
@@ -40,16 +42,16 @@ public class Client {
 								break;
 							if( pollItem[0].isReadable() ){
 								byte[] rep = req.recv();
-//								System.out.println(rep);
+								System.out.println("req"+m+" rep"+new String(rep));
 								len = count.addAndGet(rep.length);
 								count_.getAndIncrement();
 								isEnd = true;
 							}
 						}
 					}
-					if( count_.get() == reqNo*reqNo )
-						System.out.println("request count:"+reqNo*reqNo+" read bytes :"+len+" byte cost :"+(System.currentTimeMillis()-begin)+" ms"
-								+" avg request cost:"+(System.currentTimeMillis()-begin)/reqNo+"ms");
+					if( count_.get() == reqNo*sendNo )
+						System.out.println("request count:"+reqNo*sendNo+" read bytes :"+len+" byte cost :"+(System.currentTimeMillis()-begin)+" ms"
+								+" avg request cost:"+(System.currentTimeMillis()-begin)/(reqNo*sendNo)+"ms");
 				}
 			}.start();
 		}

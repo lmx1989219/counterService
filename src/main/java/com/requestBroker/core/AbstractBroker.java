@@ -1,5 +1,7 @@
 package com.requestBroker.core;
 
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -31,18 +33,29 @@ public abstract class AbstractBroker {
 		long heartbeat_at = HEARTBEAT_INTERVAL*HEARTBEAT_LIVENESS+System.currentTimeMillis();
 			while( true ){
 				PollItem[] pollItem = {new PollItem(front,Poller.POLLIN),new PollItem(back,Poller.POLLIN)}; 
-				int rc = ZMQ.poll(pollItem,2,-1);
+				int rc = ZMQ.poll(pollItem,2,1);
 				if( rc == -1 )
 					break;
 				//获取client请求
 				if( pollItem[0].isReadable() ){
 					ZMsg zms = ZMsg.recvMsg(front);
 					ZFrame zf = zms.unwrap();//取出第一帧=socket地址
-					rq.addFirst(zf);
+					rq.addLast(zf);//保证最开始进去的最先出
 					Work w = new Work(zf);
 					if( wks.size() > 0 ){
 						//包上一层信封 ,这里加入可用work地址，构造成 work地址+null+客户端content
 						zms.push(w.getNextAvalibleWork(wks));
+						ZFrame content = zms.getLast();
+						zms.removeLast();
+						byte[] e = zf.getData();
+						byte[] f = content.getData();
+						ByteBuffer bf = ByteBuffer.allocate(8+e.length+f.length);
+						bf.putInt(e.length);
+						bf.put(e);
+						bf.putInt(f.length);
+						bf.put(f);
+						bf.rewind();
+						zms.addLast(bf.array());
 						zms.send(back);
 					}
 				}
@@ -62,8 +75,35 @@ public abstract class AbstractBroker {
 						else{
 //							System.out.println("broker dispatch resp is end");
 							//封装信封，归还给请求方
+							
+							
+							ByteBuffer bf = ByteBuffer.wrap(zms.getLast().getData());
+							int l1 = bf.getInt();
+							byte x[] = new byte[l1];
+							bf.get(x);
+							ZFrame z1 = new ZFrame(x);//期望值
+							
+							int l2 = bf.getInt();
+							byte t[] = new byte[l2];
+							bf.get(t);
+							ZFrame z2 = new ZFrame(t);
+							ZFrame f1 = rq.removeFirst();//预期值
+							if( !z1.equals(f1) )
+								for( ZFrame fx : rq ){
+									if(  z1.equals(fx)  ){
+										f1 = fx;
+										System.out.println(f1+"  .. "+z1);
+										break;
+									}
+								}
+							if( !z1.equals(f1) ){
+								System.out.println("erro.........");
+								continue;
+							}
+							zms.removeLast();
+							zms.addFirst(z2);
 							zms.addFirst("");
-							zms.addFirst(rq.removeFirst());
+							zms.addFirst(f1);
 							zms.send(front);
 						}
 					}
@@ -108,7 +148,10 @@ public abstract class AbstractBroker {
 			this.expiry = System.currentTimeMillis()+HEARTBEAT_INTERVAL*HEARTBEAT_LIVENESS;
 		}
 
-		// 销毁 worker 结构，包括标识
+		/**
+		 *  销毁 worker 结构，包括标识
+		 * @param w
+		 */
 		static public void destroyWork(Work w){
 			assert w == null;
 			if( w != null ){
